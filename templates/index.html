@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS2 Now Playing</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── BUILDER CARD ─────────────────────────────────── -->
+  <div class="card">
+    <h1>&#9835; Message Builder</h1>
+    <p class="sub">Drag blocks to set the order of the message sent in CS2 chat</p>
+
+    <!-- Color toggle -->
+    <div class="toggle-row">
+      <label class="toggle">
+        <input type="checkbox" id="use-colors" />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Enable Source Engine colors (playerchatwheel &ndash; team chat only)</span>
+    </div>
+
+    <!-- Palette -->
+    <div class="palette-label">Add block</div>
+    <div class="palette">
+      <button class="palette-btn palette-text"     data-type="text"     title="Any custom text">&#43; TEXT</button>
+      <button class="palette-btn palette-artist"   data-type="artist"   title="Artist name from SoundCloud">&#43; ARTIST</button>
+      <button class="palette-btn palette-title"    data-type="title"    title="Song title from SoundCloud">&#43; TITLE</button>
+      <button class="palette-btn palette-time"     data-type="time"     title="Current playback time (updates every 3s)">&#43; TIME</button>
+      <button class="palette-btn palette-duration" data-type="duration" title="Song length">&#43; LENGTH</button>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="builder-label">Block order <span class="builder-hint">(&#8597; drag to reorder)</span></div>
+    <div class="block-list" id="block-list">
+      <div class="block-empty" id="block-empty">No blocks — add some from the palette above</div>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-label">Preview</div>
+    <div class="preview" id="preview">&hellip;</div>
+
+    <!-- Save button -->
+    <div class="btn-row">
+      <button id="btn-apply">Save now</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- ── PRESETS CARD ──────────────────────────────────── -->
+  <div class="card">
+    <h1>&#128190; Presets</h1>
+    <p class="sub">Save and switch between different message layouts</p>
+
+    <!-- Save new preset -->
+    <div class="preset-save-row">
+      <input type="text" id="preset-name" placeholder="Preset name..." />
+      <button id="btn-preset-save">Save</button>
+    </div>
+
+    <!-- Preset list -->
+    <div class="preset-list" id="preset-list">
+      <div class="preset-empty">No saved presets</div>
+    </div>
+
+    <!-- Import / Export -->
+    <div class="import-export-row">
+      <button id="btn-export" class="btn-secondary">&#8595; Export JSON</button>
+      <label class="btn-secondary btn-import-label" for="import-file">&#8593; Import JSON</label>
+      <input type="file" id="import-file" accept=".json" style="display:none" />
+    </div>
+  </div>
+
+  <!-- ── CHAR PICKER CARD ──────────────────────────────── -->
+  <div class="card">
+    <h1>&#9000; Special Characters</h1>
+    <p class="sub" style="margin-bottom: 14px">Click a character to insert it into the active TEXT block</p>
+    <p class="insert-hint">Active field: <span id="active-field-label">click a TEXT block above first</span></p>
+
+    <div class="char-section">
+      <div class="char-cat-label">&#9835; Music</div>
+      <div class="char-grid" id="chars-music"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#9733; Symbols</div>
+      <div class="char-grid" id="chars-symbols"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#8594; Arrows</div>
+      <div class="char-grid" id="chars-arrows"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#9632; Shapes</div>
+      <div class="char-grid" id="chars-shapes"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#9786; Emoticons</div>
+      <div class="char-grid" id="chars-emotes"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#9482; Box / Lines</div>
+      <div class="char-grid" id="chars-lines"></div>
+    </div>
+    <div class="char-section">
+      <div class="char-cat-label">&#174; Miscellaneous</div>
+      <div class="char-grid" id="chars-misc"></div>
+    </div>
+  </div>
+
+  <!-- ── LAST SONG CARD ────────────────────────────────── -->
+  <div class="card">
+    <label>Last detected track</label>
+    <div class="last-title" id="last-song">&mdash;</div>
+  </div>
+
+  <!-- ── WARNING ───────────────────────────────────────── -->
+  <div class="warning" id="warning-box" style="display: none">
+    <strong>&#9888; Note: color codes were patched by Valve (June 2025)</strong><br />
+    The playerchatwheel color method does not currently work in CS2.<br />
+    If Valve reverses the patch, it will work automatically.<br />
+    Limitations: <strong>team chat only</strong> | cooldown ~10&ndash;15 sec.
+  </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
