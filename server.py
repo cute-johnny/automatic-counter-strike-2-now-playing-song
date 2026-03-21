@@ -486,7 +486,16 @@ def presets_save():
         return jsonify({"error": "write failed"}), 500
 
 
-@app.route("/presets/<n>", methods=["DELETE"])
+@app.route("/presets/import", methods=["POST"])
+def presets_import():
+    try:
+        incoming = request.get_json(force=True)
+        if not isinstance(incoming, dict):
+            raise ValueError("expected object")
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+@app.route("/presets/<name>", methods=["DELETE"])
 def presets_delete(name):
     presets = load_presets_file()
     if name not in presets:
@@ -497,7 +506,7 @@ def presets_delete(name):
     return jsonify({"ok": True})
 
 
-@app.route("/presets/<n>/load", methods=["POST"])
+@app.route("/presets/<name>/load", methods=["POST"])
 def presets_load(name):
     presets = load_presets_file()
     if name not in presets:
@@ -512,15 +521,6 @@ def presets_load(name):
     write_cfg_current(placeholder=True)
     return jsonify({"ok": True, "config": live.to_dict()})
 
-
-@app.route("/presets/import", methods=["POST"])
-def presets_import():
-    try:
-        incoming = request.get_json(force=True)
-        if not isinstance(incoming, dict):
-            raise ValueError("expected object")
-    except Exception:
-        return jsonify({"error": "invalid JSON"}), 400
 
     presets = load_presets_file()
     imported = 0

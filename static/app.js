@@ -364,8 +364,8 @@ function onToggleColors() {
 
 let _applyTimer = null;
 
-function scheduleApply() {
-  markCustom();
+function scheduleApply(userInitiated = true) {
+  if (userInitiated) markCustom();
   clearTimeout(_applyTimer);
   setStatus("Unsaved changes...", "warn");
   _applyTimer = setTimeout(() => applyConfig(true), 1000);
@@ -494,6 +494,7 @@ async function presetSave() {
   const name      = nameInput.value.trim();
   if (!name) { nameInput.focus(); return; }
 
+  // Push current blocks to server first (without triggering markCustom)
   await fetch("/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -507,9 +508,14 @@ async function presetSave() {
   });
 
   if (res.ok) {
-    activePreset = name;
+    activePreset = name;   // mark as active BEFORE re-rendering
     nameInput.value = "";
-    renderPresets(activePreset);
+    await renderPresets(activePreset);
+    setStatus(`Preset "${name}" saved!`, "ok");
+    setTimeout(() => setStatus("", ""), 2000);
+  } else {
+    setStatus("Failed to save preset.", "error");
+    setTimeout(() => setStatus("", ""), 2000);
   }
 }
 
@@ -528,7 +534,9 @@ async function presetLoad(name) {
   activePreset = name;
   renderBlocks();
   updatePreview();
-  renderPresets(activePreset);
+  await renderPresets(activePreset);
+  setStatus(`Loaded preset "${name}"`, "ok");
+  setTimeout(() => setStatus("", ""), 2000);
 }
 
 async function presetDelete(name) {

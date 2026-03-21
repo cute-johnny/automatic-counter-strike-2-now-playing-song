@@ -16,7 +16,7 @@
     const TIME_URL = 'http://localhost:9999/time';
 
     const SONG_INTERVAL_MS = 2000;  // how often to check for a track change
-    const TIME_INTERVAL_MS = 3000;  // how often to send playback time (required)
+    const TIME_INTERVAL_MS = 1000;  // how often to send playback time
 
     let lastSentKey = null;
 
