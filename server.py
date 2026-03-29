@@ -4,10 +4,21 @@ CS2 Now Playing – SoundCloud -> CFG Edition
 REQUIREMENTS:  pip install flask
 CS2 BIND:      bind "MOUSE4" "exec nowplaying.cfg"
 PANEL:         http://localhost:9999
+
+CS2 LAUNCH OPTIONS (for chat watcher):
+    -condebug -noclearlog
 """
 
 import sys, time, threading, logging, os, json, uuid
 from flask import Flask, request, jsonify, render_template
+from cs2_chat_watcher import CS2ChatWatcher, Trigger, find_console_log
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 # ─────────────────────────────────────────────
 #  SOURCE ENGINE COLOR CODES
@@ -74,6 +85,12 @@ class LiveConfig:
                 self._blocks = valid
             if use_colors is not None:
                 self._use_colors = bool(use_colors)
+
+    @property
+    def has_time_blocks(self) -> bool:
+        """True if any block requires playback time — avoids full to_dict() on the hot /time path."""
+        with self._lock:
+            return any(b["type"] in ("time", "duration") for b in self._blocks)
 
     def format(self, title, artist="", current_time="", duration=""):
         with self._lock:
@@ -179,7 +196,9 @@ live = LiveConfig()
 #  PRESETS
 # ─────────────────────────────────────────────
 
-PRESETS_FILE = "nowplaying_presets.json"
+PRESETS_FILE  = "nowplaying_presets.json"
+CONFIG_FILE   = "nowplaying_config.json"    # persists live blocks/use_colors between restarts
+TRIGGERS_FILE = "nowplaying_triggers.json"  # persists chat triggers between restarts
 
 def load_presets_file():
     try:
@@ -196,6 +215,36 @@ def save_presets_file(presets):
     except IOError as e:
         log("ERROR", f"Could not save presets: {e}")
         return False
+
+def load_config_file():
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (IOError, json.JSONDecodeError):
+        return None
+
+def save_config_file():
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(live.to_dict(), f, ensure_ascii=False, indent=2)
+    except IOError as e:
+        log("ERROR", f"Could not save config state: {e}")
+
+def load_triggers_file() -> list[dict]:
+    try:
+        with open(TRIGGERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (IOError, json.JSONDecodeError):
+        return []
+
+def save_triggers_file():
+    if watcher is None:
+        return
+    try:
+        with open(TRIGGERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(watcher.get_triggers(), f, ensure_ascii=False, indent=2)
+    except IOError as e:
+        log("ERROR", f"Could not save triggers: {e}")
 
 # ─────────────────────────────────────────────
 #  STATIC CONFIG
@@ -284,7 +333,9 @@ def write_cfg(title, artist="", current_time="", duration=""):
     cfg_path = CONFIG["cfg_path"]
     content  = live.get_command(title, artist, current_time, duration) + "\n"
     try:
-        os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+        parent = os.path.dirname(cfg_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(content)
         log("FILE", content.strip())
@@ -348,12 +399,14 @@ class SongHistory:
 
 songs = SongHistory()
 
+# Chat watcher — started in main() once cfg_path is known
+watcher: CS2ChatWatcher | None = None
+
 # ─────────────────────────────────────────────
 #  FLASK
 # ─────────────────────────────────────────────
 
 app = Flask(__name__)
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 
 @app.route("/")
@@ -394,6 +447,7 @@ def config_set():
     duration = songs.last_duration or "0:00"
     write_cfg(title, artist, cur_time, duration)
     log("OK", f"CFG written ({'real data' if songs.last_title else 'placeholder — waiting for SoundCloud'}).\n")
+    save_config_file()
 
     return jsonify({"ok": True, "used_placeholder": not bool(songs.last_title)})
 
@@ -416,12 +470,8 @@ def receive_time():
     songs.update_time(current_time, duration)
 
     # Only rewrite the CFG if the layout actually uses a time or duration block.
-    # Otherwise rewriting every 3s would be wasteful.
-    has_time_block = any(
-        b.get("type") in ("time", "duration")
-        for b in live.to_dict()["blocks"]
-    )
-    if has_time_block and songs.last_title:
+    # Otherwise rewriting every second would be wasteful.
+    if live.has_time_blocks and songs.last_title:
         write_cfg_current()
 
     return jsonify({"status": "ok"}), 200
@@ -495,6 +545,17 @@ def presets_import():
     except Exception:
         return jsonify({"error": "invalid JSON"}), 400
 
+    presets = load_presets_file()
+    imported = 0
+    for name, cfg in incoming.items():
+        if isinstance(cfg, dict) and "blocks" in cfg:
+            presets[str(name)] = cfg
+            imported += 1
+
+    save_presets_file(presets)
+    log("CFG", f"Imported {imported} preset(s)")
+    return jsonify({"ok": True, "imported": imported})
+
 @app.route("/presets/<name>", methods=["DELETE"])
 def presets_delete(name):
     presets = load_presets_file()
@@ -519,19 +580,141 @@ def presets_load(name):
     )
     log("CFG", f"Loaded preset: {name!r}")
     write_cfg_current(placeholder=True)
+    save_config_file()
     return jsonify({"ok": True, "config": live.to_dict()})
 
 
-    presets = load_presets_file()
-    imported = 0
-    for name, cfg in incoming.items():
-        if isinstance(cfg, dict) and "blocks" in cfg:
-            presets[str(name)] = cfg
-            imported += 1
 
-    save_presets_file(presets)
-    log("CFG", f"Imported {imported} preset(s)")
-    return jsonify({"ok": True, "imported": imported})
+# ─────────────────────────────────────────────
+#  CHAT WATCHER ENDPOINTS
+# ─────────────────────────────────────────────
+
+@app.route("/watcher/status", methods=["GET"])
+def watcher_status():
+    """Returns watcher health and log file info."""
+    if watcher is None:
+        return jsonify({"running": False, "reason": "not initialized"})
+    return jsonify({
+        "running":    watcher.is_running,
+        "log_path":   watcher.log_path,
+        "log_exists": watcher.log_exists,
+    })
+
+
+@app.route("/watcher/triggers", methods=["GET"])
+def triggers_list():
+    if watcher is None:
+        return jsonify([])
+    return jsonify(watcher.get_triggers())
+
+
+@app.route("/watcher/triggers", methods=["POST"])
+def triggers_add():
+    if watcher is None:
+        return jsonify({"error": "watcher not running"}), 503
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    label        = data.get("label", "").strip()
+    pattern      = data.get("pattern", "").strip()
+    regex        = data.get("regex", "").strip()
+    strip_prefix = data.get("strip_prefix", "").strip()
+
+    if not label:
+        return jsonify({"error": "label is required"}), 400
+    if not pattern and not regex:
+        return jsonify({"error": "pattern or regex is required"}), 400
+
+    trigger = Trigger(
+        id           = str(uuid.uuid4())[:8],
+        label        = label,
+        pattern      = pattern,
+        regex        = regex,
+        enabled      = data.get("enabled", True),
+        strip_prefix = strip_prefix,
+    )
+    watcher.add_trigger(trigger)
+    save_triggers_file()
+    return jsonify({"ok": True, "trigger": trigger.to_dict()})
+
+
+@app.route("/watcher/triggers/<trigger_id>", methods=["DELETE"])
+def triggers_delete(trigger_id):
+    if watcher is None:
+        return jsonify({"error": "watcher not running"}), 503
+    existed = watcher.remove_trigger(trigger_id)
+    if not existed:
+        return jsonify({"error": "not found"}), 404
+    save_triggers_file()
+    return jsonify({"ok": True, "triggers": watcher.get_triggers()})
+
+
+@app.route("/watcher/triggers/<trigger_id>", methods=["PATCH"])
+def triggers_update(trigger_id):
+    if watcher is None:
+        return jsonify({"error": "watcher not running"}), 503
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    t = watcher.update_trigger(trigger_id, **{
+        k: v for k, v in data.items()
+        if k in ("label", "pattern", "regex", "enabled", "strip_prefix")
+    })
+    if t is None:
+        return jsonify({"error": "not found"}), 404
+    save_triggers_file()
+    return jsonify({"ok": True, "trigger": t.to_dict(), "triggers": watcher.get_triggers()})
+
+
+@app.route("/watcher/events", methods=["GET"])
+def watcher_events():
+    """
+    Poll endpoint for the browser script.
+    Returns the most recent matched events.
+    Optional query param: ?limit=N (default 50)
+    """
+    if watcher is None:
+        return jsonify([])
+    limit = min(int(request.args.get("limit", 50)), 200)
+    return jsonify(watcher.get_recent_events(limit))
+
+
+@app.route("/watcher/banwords", methods=["GET"])
+def banwords_list():
+    if watcher is None:
+        return jsonify([])
+    return jsonify(watcher.get_ban_words())
+
+
+@app.route("/watcher/banwords", methods=["POST"])
+def banwords_add():
+    if watcher is None:
+        return jsonify({"error": "watcher not running"}), 503
+    try:
+        data = request.get_json(force=True)
+        word = data.get("word", "").strip()
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    if not word:
+        return jsonify({"error": "empty word"}), 400
+
+    added = watcher.add_ban_word(word)
+    return jsonify({"ok": True, "word": word.lower(), "added": added})
+
+
+@app.route("/watcher/banwords/<word>", methods=["DELETE"])
+def banwords_delete(word):
+    if watcher is None:
+        return jsonify({"error": "watcher not running"}), 503
+    existed = watcher.remove_ban_word(word)
+    if not existed:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
 
 
 # ─────────────────────────────────────────────
@@ -549,12 +732,39 @@ def main():
     CONFIG["cfg_path"] = resolve_cfg_path()
     print()
 
+    # ── Start chat watcher ────────────────────
+    global watcher
+    console_log_path = find_console_log(CONFIG["cfg_path"])
+    watcher = CS2ChatWatcher(console_log_path)
+    watcher.start()
+
+    # Restore triggers from last session
+    saved_triggers = load_triggers_file()
+    for t_data in saved_triggers:
+        try:
+            watcher.add_trigger(Trigger(**t_data))
+        except Exception as e:
+            log("WARN", f"Skipped invalid saved trigger: {e}")
+    if saved_triggers:
+        log("OK", f"Restored {len(saved_triggers)} trigger(s) from {TRIGGERS_FILE}")
+
+    # Restore live config from last session (blocks + use_colors)
+    saved_config = load_config_file()
+    if saved_config:
+        live.update(
+            blocks     = saved_config.get("blocks"),
+            use_colors = saved_config.get("use_colors"),
+        )
+        log("OK", f"Restored config state from {CONFIG_FILE}")
+
     log("INFO", f"Server / Panel : http://localhost:{CONFIG['server_port']}")
     log("INFO", f"CFG file       : {CONFIG['cfg_path']}")
+    log("INFO", f"Console log    : {console_log_path}")
     log("INFO", f"History file   : {CONFIG['log_file']}")
     log("INFO", f"Presets file   : {PRESETS_FILE}")
     print()
     log("WARN", 'CS2 bind       : bind "MOUSE4" "exec nowplaying.cfg"')
+    log("WARN", 'CS2 launch opt : -condebug -noclearlog  (required for chat watcher)')
     print()
     log("INFO", "Waiting for data from SoundCloud...\n")
 

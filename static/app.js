@@ -416,6 +416,10 @@ async function loadConfig() {
     renderBlocks();
     updatePreview();
 
+    // Restore active preset from localStorage (survives page refresh)
+    const savedPreset = localStorage.getItem('cs2np_active_preset');
+    if (savedPreset && activePreset === null) activePreset = savedPreset;
+
     const last = d.last_artist
       ? `${d.last_artist} - ${d.last_song}`
       : (d.last_song || "—");
@@ -441,7 +445,8 @@ async function loadPresetsFromServer() {
   try {
     const res = await fetch("/presets");
     return await res.json();
-  } catch {
+  } catch (e) {
+    console.error("Failed to load presets:", e);
     return {};
   }
 }
@@ -509,6 +514,7 @@ async function presetSave() {
 
   if (res.ok) {
     activePreset = name;   // mark as active BEFORE re-rendering
+    localStorage.setItem('cs2np_active_preset', name);
     nameInput.value = "";
     await renderPresets(activePreset);
     setStatus(`Preset "${name}" saved!`, "ok");
@@ -532,9 +538,10 @@ async function presetLoad(name) {
   document.getElementById("warning-box").style.display = useColors ? "" : "none";
 
   activePreset = name;
+  localStorage.setItem('cs2np_active_preset', name);
+  await renderPresets(activePreset);
   renderBlocks();
   updatePreview();
-  await renderPresets(activePreset);
   setStatus(`Loaded preset "${name}"`, "ok");
   setTimeout(() => setStatus("", ""), 2000);
 }
@@ -542,19 +549,27 @@ async function presetLoad(name) {
 async function presetDelete(name) {
   if (!confirm(`Delete preset "${name}"?`)) return;
   await fetch(`/presets/${encodeURIComponent(name)}`, { method: "DELETE" });
-  if (activePreset === name) activePreset = null;
-  renderPresets(activePreset);
+  if (activePreset === name) {
+    activePreset = null;
+    localStorage.removeItem('cs2np_active_preset');
+  }
+  await renderPresets(activePreset);
 }
 
 /* ── EXPORT ───────────────────────────────────────────── */
 
 async function exportPresets() {
-  const presets = await loadPresetsFromServer();
-  const blob    = new Blob([JSON.stringify(presets, null, 2)], { type: "application/json" });
-  const url     = URL.createObjectURL(blob);
-  const a       = document.createElement("a");
-  a.href = url; a.download = "nowplaying_presets.json"; a.click();
-  URL.revokeObjectURL(url);
+  try {
+    const presets = await loadPresetsFromServer();
+    const blob    = new Blob([JSON.stringify(presets, null, 2)], { type: "application/json" });
+    const url     = URL.createObjectURL(blob);
+    const a       = document.createElement("a");
+    a.href = url; a.download = "nowplaying_presets.json"; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Failed to export presets:", e);
+    alert("Failed to export presets. Please try again.");
+  }
 }
 
 /* ── IMPORT ───────────────────────────────────────────── */
@@ -568,11 +583,15 @@ async function importPresets(file) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
     const d = await res.json();
     alert(`Imported ${d.imported ?? 0} preset(s).`);
     renderPresets(activePreset);
-  } catch {
-    alert("Import failed: invalid JSON file.");
+  } catch (e) {
+    console.error("Import failed:", e);
+    alert("Import failed: invalid JSON file or server error.");
   }
 }
 
@@ -618,6 +637,7 @@ setInterval(async () => {
   try {
     const res = await fetch("/config");
     const d   = await res.json();
+
     const last = d.last_artist
       ? `${d.last_artist} - ${d.last_song}`
       : (d.last_song || "—");
@@ -683,4 +703,285 @@ for (const [gridId, chars] of Object.entries(CHAR_CATS)) {
 }
 
 loadConfig();
-renderPresets(null);
+renderPresets(activePreset);
+
+/* ═══════════════════════════════════════════════════════
+   CHAT TRIGGERS
+   ═══════════════════════════════════════════════════════ */
+
+let _lastEventId = null;  // track newest event to avoid re-showing
+
+/* ── Watcher status ───────────────────────────────────── */
+
+async function updateWatcherStatus() {
+  try {
+    const res = await fetch("/watcher/status");
+    const d   = await res.json();
+    const dot  = document.getElementById("watcher-dot");
+    const text = document.getElementById("watcher-status-text");
+
+    if (!d.running) {
+      dot.className  = "watcher-dot error";
+      text.textContent = d.reason || "Watcher not running";
+    } else if (!d.log_exists) {
+      dot.className  = "watcher-dot warn";
+      text.textContent = `Log not found — start CS2 with -condebug -noclearlog`;
+    } else {
+      dot.className  = "watcher-dot ok";
+      text.textContent = `Watching: ${d.log_path.split(/[\\/]/).slice(-3).join("/")}`;
+    }
+  } catch {
+    const dot = document.getElementById("watcher-dot");
+    if (dot) { dot.className = "watcher-dot error"; }
+  }
+}
+
+/* ── Trigger list ─────────────────────────────────────── */
+
+async function loadTriggers() {
+  try {
+    const res  = await fetch("/watcher/triggers");
+    const list = await res.json();
+    renderTriggers(list);
+  } catch (e) {
+    console.warn("Could not load triggers:", e);
+  }
+}
+
+function renderTriggers(triggers) {
+  const container = document.getElementById("trigger-list");
+  container.innerHTML = "";
+
+  if (!triggers.length) {
+    const empty = document.createElement("div");
+    empty.className = "trigger-empty";
+    empty.textContent = "No triggers defined";
+    container.appendChild(empty);
+    return;
+  }
+
+  triggers.forEach(t => {
+    const row = document.createElement("div");
+    row.className = "trigger-item" + (t.enabled ? "" : " disabled");
+
+    const label = document.createElement("span");
+    label.className = "trigger-label-text";
+    label.textContent = t.label;
+    label.title = t.label;
+
+    const pattern = document.createElement("span");
+    pattern.className = "trigger-pattern-text";
+    pattern.textContent = t.regex ? `/${t.regex}/` : `"${t.pattern}"`;
+    pattern.title = t.regex ? `regex: ${t.regex}` : `match: ${t.pattern}`;
+
+    // Strip prefix badge
+    let prefixBadge = null;
+    if (t.strip_prefix) {
+      prefixBadge = document.createElement("span");
+      prefixBadge.className = "trigger-prefix-badge";
+      prefixBadge.textContent = `strip: "${t.strip_prefix}"`;
+      prefixBadge.title = `Query = everything after "${t.strip_prefix}"`;
+    }
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "trigger-toggle";
+    toggleBtn.textContent = t.enabled ? "ON" : "OFF";
+    toggleBtn.addEventListener("click", () => toggleTrigger(t.id, !t.enabled));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "trigger-del";
+    delBtn.textContent = "×";
+    delBtn.title = "Delete trigger";
+    delBtn.addEventListener("click", () => deleteTrigger(t.id));
+
+    if (prefixBadge) row.append(label, pattern, prefixBadge, toggleBtn, delBtn);
+    else row.append(label, pattern, toggleBtn, delBtn);
+    container.appendChild(row);
+  });
+}
+
+async function addTrigger() {
+  const label        = document.getElementById("trigger-label").value.trim();
+  const pattern      = document.getElementById("trigger-pattern").value.trim();
+  const stripPrefix  = document.getElementById("trigger-strip-prefix").value.trim();
+  const regex        = document.getElementById("trigger-regex").value.trim();
+
+  if (!label || (!pattern && !regex)) return;
+
+  await fetch("/watcher/triggers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label, pattern, regex, strip_prefix: stripPrefix }),
+  });
+
+  document.getElementById("trigger-label").value        = "";
+  document.getElementById("trigger-pattern").value      = "";
+  document.getElementById("trigger-strip-prefix").value = "";
+  document.getElementById("trigger-regex").value        = "";
+  await loadTriggers();
+}
+
+async function toggleTrigger(id, enabled) {
+  const res = await fetch(`/watcher/triggers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (res.ok) {
+    const d = await res.json();
+    renderTriggers(d.triggers);
+  } else {
+    await loadTriggers();
+  }
+}
+
+async function deleteTrigger(id) {
+  if (!confirm("Delete this trigger?")) return;
+  const res = await fetch(`/watcher/triggers/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (res.ok) {
+    const d = await res.json();
+    renderTriggers(d.triggers);
+  } else {
+    await loadTriggers();
+  }
+}
+
+/* ── Events log ───────────────────────────────────────── */
+
+async function pollEvents() {
+  try {
+    const res    = await fetch("/watcher/events?limit=30");
+    const events = await res.json();
+    if (!events.length) return;
+
+    // Only render if there's a new event
+    const newestId = events[0]?.id;
+    if (newestId === _lastEventId) return;
+    _lastEventId = newestId;
+
+    renderEvents(events);
+  } catch {}
+}
+
+function renderEvents(events) {
+  const log = document.getElementById("events-log");
+  log.innerHTML = "";
+
+  if (!events.length) {
+    const empty = document.createElement("div");
+    empty.className = "events-empty";
+    empty.textContent = "No events yet";
+    log.appendChild(empty);
+    return;
+  }
+
+  events.forEach(e => {
+    const row = document.createElement("div");
+    row.className = "event-row";
+
+    const t = document.createElement("span");
+    t.className = "event-time";
+    t.textContent = e.timestamp ? e.timestamp.split(" - ")[1] : "??:??:??";
+
+    const trig = document.createElement("span");
+    trig.className = "event-trigger";
+    trig.textContent = `[${e.trigger_label}]`;
+
+    const player = document.createElement("span");
+    player.className = "event-player";
+    player.textContent = e.player ? `${e.player}:` : "";
+
+    const msg = document.createElement("span");
+    msg.className = "event-msg";
+    msg.textContent = e.message;
+
+    row.append(t, trig, player, msg);
+    log.appendChild(row);
+  });
+}
+
+/* ── Init triggers ────────────────────────────────────── */
+
+document.getElementById("btn-trigger-add").addEventListener("click", addTrigger);
+
+["trigger-label", "trigger-pattern", "trigger-strip-prefix", "trigger-regex"].forEach(id => {
+  document.getElementById(id).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addTrigger();
+  });
+});
+
+// Poll watcher status every 5s, events every 1s
+updateWatcherStatus();
+loadTriggers();
+setInterval(updateWatcherStatus, 5000);
+setInterval(pollEvents, 1000);
+
+/* ═══════════════════════════════════════════════════════
+   BAN WORDS
+   ═══════════════════════════════════════════════════════ */
+
+async function loadBanWords() {
+  try {
+    const res   = await fetch("/watcher/banwords");
+    const words = await res.json();
+    renderBanWords(words);
+  } catch (e) {
+    console.warn("Could not load ban words:", e);
+  }
+}
+
+function renderBanWords(words) {
+  const container = document.getElementById("banwords-list");
+  container.innerHTML = "";
+
+  if (!words.length) {
+    const empty = document.createElement("span");
+    empty.className = "banwords-empty";
+    empty.textContent = "No ban words";
+    container.appendChild(empty);
+    return;
+  }
+
+  words.forEach(word => {
+    const chip = document.createElement("div");
+    chip.className = "banword-chip";
+
+    const text = document.createTextNode(word);
+
+    const del = document.createElement("button");
+    del.className = "banword-chip-del";
+    del.textContent = "×";
+    del.title = `Remove "${word}"`;
+    del.addEventListener("click", () => deleteBanWord(word));
+
+    chip.append(text, del);
+    container.appendChild(chip);
+  });
+}
+
+async function addBanWord() {
+  const input = document.getElementById("banword-input");
+  const word  = input.value.trim();
+  if (!word) { input.focus(); return; }
+
+  await fetch("/watcher/banwords", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ word }),
+  });
+
+  input.value = "";
+  await loadBanWords();
+}
+
+async function deleteBanWord(word) {
+  await fetch(`/watcher/banwords/${encodeURIComponent(word)}`, { method: "DELETE" });
+  await loadBanWords();
+}
+
+document.getElementById("btn-banword-add").addEventListener("click", addBanWord);
+document.getElementById("banword-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addBanWord();
+});
+
+loadBanWords();

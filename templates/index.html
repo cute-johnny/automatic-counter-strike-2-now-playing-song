@@ -110,6 +110,52 @@
     </div>
   </div>
 
+  <!-- ── CHAT TRIGGERS CARD ───────────────────────────── -->
+  <div class="card">
+    <h1>&#9741; Chat Triggers</h1>
+    <p class="sub">
+      React to CS2 chat messages automatically &mdash; requires
+      <code style="background:#0f0f13;padding:1px 5px;border-radius:3px;font-size:0.8rem">-condebug -noclearlog</code>
+      in CS2 launch options
+    </p>
+
+    <!-- Watcher status badge -->
+    <div class="watcher-status-row">
+      <span class="watcher-dot" id="watcher-dot"></span>
+      <span class="watcher-status-text" id="watcher-status-text">Checking...</span>
+    </div>
+
+    <!-- Add trigger form -->
+    <div class="trigger-form">
+      <input type="text" id="trigger-label"        placeholder="Label (e.g. Song request)" style="flex:2" />
+      <input type="text" id="trigger-pattern"      placeholder="Match text (e.g. !play)" style="flex:2" />
+      <input type="text" id="trigger-strip-prefix" placeholder="Strip prefix (e.g. !play)" style="flex:2" title="Everything after this prefix becomes the search query" />
+      <input type="text" id="trigger-regex"        placeholder="Regex (optional)" style="flex:2" />
+      <button id="btn-trigger-add">Add</button>
+    </div>
+
+    <!-- Trigger list -->
+    <div class="trigger-list" id="trigger-list">
+      <div class="trigger-empty">No triggers defined</div>
+    </div>
+
+    <!-- Recent events -->
+    <div class="events-label">Recent matched events</div>
+    <div class="events-log" id="events-log">
+      <div class="events-empty">No events yet</div>
+    </div>
+
+    <!-- Ban words -->
+    <div class="banwords-label">Ban words <span class="banwords-hint">— messages containing these words are ignored even if a trigger matches</span></div>
+    <div class="banwords-form">
+      <input type="text" id="banword-input" placeholder="Word to ban..." />
+      <button id="btn-banword-add">Add</button>
+    </div>
+    <div class="banwords-list" id="banwords-list">
+      <span class="banwords-empty">No ban words</span>
+    </div>
+  </div>
+
   <!-- ── LAST SONG CARD ────────────────────────────────── -->
   <div class="card">
     <label>Last detected track</label>
