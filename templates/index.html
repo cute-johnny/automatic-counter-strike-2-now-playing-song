@@ -14,6 +14,27 @@
     <h1>&#9835; Message Builder</h1>
     <p class="sub">Drag blocks to set the order of the message sent in CS2 chat</p>
 
+    <!-- Builder Options Row (Chat channel & Separator) -->
+    <div class="builder-options-grid">
+      <div>
+        <label for="chat-command">CS2 Chat Output</label>
+        <select id="chat-command" class="ui-select">
+          <option value="say">All Chat (say)</option>
+          <option value="say_team">Team Chat Only (say_team)</option>
+        </select>
+      </div>
+      <div>
+        <label for="block-separator">Block Separator</label>
+        <select id="block-separator" class="ui-select">
+          <option value=" ">Space ( )</option>
+          <option value=" - ">Dash ( - )</option>
+          <option value=" | ">Pipe ( | )</option>
+          <option value=" · ">Dot ( · )</option>
+          <option value=" / ">Slash ( / )</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Color toggle -->
     <div class="toggle-row">
       <label class="toggle">
@@ -26,11 +47,12 @@
     <!-- Palette -->
     <div class="palette-label">Add block</div>
     <div class="palette">
-      <button class="palette-btn palette-text"     data-type="text"     title="Any custom text">&#43; TEXT</button>
-      <button class="palette-btn palette-artist"   data-type="artist"   title="Artist name from SoundCloud">&#43; ARTIST</button>
-      <button class="palette-btn palette-title"    data-type="title"    title="Song title from SoundCloud">&#43; TITLE</button>
-      <button class="palette-btn palette-time"     data-type="time"     title="Current playback time (updates every 3s)">&#43; TIME</button>
-      <button class="palette-btn palette-duration" data-type="duration" title="Song length">&#43; LENGTH</button>
+      <button class="palette-btn palette-text"      data-type="text"      title="Any custom text">&#43; TEXT</button>
+      <button class="palette-btn palette-artist"    data-type="artist"    title="Artist / Channel name">&#43; ARTIST</button>
+      <button class="palette-btn palette-title"     data-type="title"     title="Song / Video title">&#43; TITLE</button>
+      <button class="palette-btn palette-time"      data-type="time"      title="Current playback time">&#43; TIME</button>
+      <button class="palette-btn palette-duration"  data-type="duration"  title="Total song length">&#43; LENGTH</button>
+      <button class="palette-btn palette-requester" data-type="requester" title="Player who requested the song">&#43; REQUESTER</button>
     </div>
 
     <!-- Drop zone -->
@@ -48,6 +70,150 @@
       <button id="btn-apply">Save now</button>
     </div>
     <div class="status" id="status"></div>
+  </div>
+
+  <!-- ── SONG QUEUE & RULES CARD ──────────────────────── -->
+  <div class="card">
+    <h1>&#128194; Song Queue &amp; Playback Rules</h1>
+    <p class="sub">Control how chat song requests (<code class="inline-code">!play &lt;song&gt;</code>) are queued, filtered, and played</p>
+
+    <!-- Playback Mode Selector -->
+    <div class="queue-mode-box">
+      <label for="q-playback-mode">Request Handling Mode</label>
+      <select id="q-playback-mode" class="ui-select">
+        <option value="auto_queue">Auto-Queue (Recommended) — Play immediately if idle, otherwise queue &amp; auto-advance when song ends</option>
+        <option value="instant">Instant Override — Immediately switch to every new requested song</option>
+        <option value="manual">Manual Approval — Add requests to queue and wait until you click Play</option>
+      </select>
+    </div>
+
+    <!-- Manual Add to Queue Bar -->
+    <div class="queue-manual-row">
+      <input type="text" id="queue-manual-input" placeholder="Add song name or YouTube URL manually..." />
+      <button id="btn-queue-add" class="btn-secondary">+ Queue</button>
+      <button id="btn-queue-playnow" class="btn-accent">&#9654; Play Now</button>
+    </div>
+
+    <!-- Queue Status Header -->
+    <div class="queue-status-row">
+      <div class="queue-status-left">
+        <span class="queue-count" id="queue-count">0 songs in queue</span>
+        <span class="playback-pill idle" id="playback-state-pill">Idle</span>
+      </div>
+      <span class="queue-processing" id="queue-processing" style="display: none">
+        <span class="processing-indicator"></span> Dispatching...
+      </span>
+    </div>
+
+    <!-- Queue List -->
+    <div class="queue-list" id="queue-list">
+      <div class="queue-empty">No songs in queue</div>
+    </div>
+
+    <!-- Queue Action Buttons -->
+    <div class="queue-controls">
+      <button id="btn-queue-next" class="btn-secondary">&#9654; Skip / Play Next</button>
+      <button id="btn-queue-clear" class="btn-secondary btn-danger">&#128465; Clear Queue</button>
+    </div>
+
+    <hr class="section-divider" />
+
+    <!-- Queue Rules & Protections -->
+    <div class="rules-header">
+      <span class="builder-label" style="margin-bottom:0">Queue Rules &amp; Protections</span>
+      <span class="rules-status" id="rules-status"></span>
+    </div>
+
+    <div class="rules-grid">
+      <div class="rule-field">
+        <label for="q-max-duration">Max Song Length (min)</label>
+        <input type="number" id="q-max-duration" min="0" max="180" value="10" title="0 = unlimited. Videos longer than this are skipped automatically." />
+        <span class="rule-hint">0 = no limit (auto-skips if exceeded)</span>
+      </div>
+      <div class="rule-field">
+        <label for="q-cooldown">Global Cooldown (sec)</label>
+        <input type="number" id="q-cooldown" min="0" max="600" value="5" />
+        <span class="rule-hint">Wait time between any two chat requests</span>
+      </div>
+      <div class="rule-field">
+        <label for="q-player-cooldown">Per-Player Cooldown (sec)</label>
+        <input type="number" id="q-player-cooldown" min="0" max="1800" value="15" />
+        <span class="rule-hint">Wait time per individual player</span>
+      </div>
+      <div class="rule-field">
+        <label for="q-max-size">Max Queue Size</label>
+        <input type="number" id="q-max-size" min="1" max="100" value="20" />
+        <span class="rule-hint">Max total songs waiting in queue</span>
+      </div>
+      <div class="rule-field">
+        <label for="q-max-per-player">Max Songs / Player</label>
+        <input type="number" id="q-max-per-player" min="0" max="50" value="3" />
+        <span class="rule-hint">0 = unlimited per player</span>
+      </div>
+      <div class="rule-field">
+        <label for="q-chat-channels">Allowed CS2 Chat</label>
+        <select id="q-chat-channels" class="ui-select">
+          <option value="both">All + Team Chat ([ALL], [T], [CT])</option>
+          <option value="team_only">Team Chat Only ([T], [CT], [TEAM])</option>
+          <option value="all_only">All Chat Only ([ALL])</option>
+        </select>
+        <span class="rule-hint">Which chat channels can trigger songs</span>
+      </div>
+    </div>
+
+    <div class="toggle-row" style="margin-top:12px; margin-bottom:0">
+      <label class="toggle">
+        <input type="checkbox" id="q-prevent-duplicates" checked />
+        <span class="slider"></span>
+      </label>
+      <span class="toggle-label">Prevent duplicate requests (ignore songs already in queue or playing)</span>
+    </div>
+  </div>
+
+  <!-- ── CHAT TRIGGERS CARD ───────────────────────────── -->
+  <div class="card">
+    <h1>&#9741; Chat Triggers &amp; Filters</h1>
+    <p class="sub">
+      React to CS2 chat messages automatically &mdash; requires
+      <code class="inline-code">-condebug -noclearlog</code>
+      in CS2 launch options
+    </p>
+
+    <!-- Watcher status badge -->
+    <div class="watcher-status-row">
+      <span class="watcher-dot" id="watcher-dot"></span>
+      <span class="watcher-status-text" id="watcher-status-text">Checking...</span>
+    </div>
+
+    <!-- Add trigger form -->
+    <div class="trigger-form">
+      <input type="text" id="trigger-label"        placeholder="Label (e.g. Song request)" style="flex:2" />
+      <input type="text" id="trigger-pattern"      placeholder="Match text (e.g. !play)" style="flex:2" />
+      <input type="text" id="trigger-strip-prefix" placeholder="Strip prefix (e.g. !play)" style="flex:2" title="Everything after this prefix becomes the search query" />
+      <input type="text" id="trigger-regex"        placeholder="Regex (optional)" style="flex:2" />
+      <button id="btn-trigger-add">Add</button>
+    </div>
+
+    <!-- Trigger list -->
+    <div class="trigger-list" id="trigger-list">
+      <div class="trigger-empty">No triggers defined</div>
+    </div>
+
+    <!-- Recent events -->
+    <div class="events-label">Recent matched events</div>
+    <div class="events-log" id="events-log">
+      <div class="events-empty">No events yet</div>
+    </div>
+
+    <!-- Ban words -->
+    <div class="banwords-label">Ban words <span class="banwords-hint">— messages containing these words are ignored even if a trigger matches</span></div>
+    <div class="banwords-form">
+      <input type="text" id="banword-input" placeholder="Word to ban..." />
+      <button id="btn-banword-add">Add</button>
+    </div>
+    <div class="banwords-list" id="banwords-list">
+      <span class="banwords-empty">No ban words</span>
+    </div>
   </div>
 
   <!-- ── PRESETS CARD ──────────────────────────────────── -->
@@ -110,55 +276,9 @@
     </div>
   </div>
 
-  <!-- ── CHAT TRIGGERS CARD ───────────────────────────── -->
-  <div class="card">
-    <h1>&#9741; Chat Triggers</h1>
-    <p class="sub">
-      React to CS2 chat messages automatically &mdash; requires
-      <code style="background:#0f0f13;padding:1px 5px;border-radius:3px;font-size:0.8rem">-condebug -noclearlog</code>
-      in CS2 launch options
-    </p>
-
-    <!-- Watcher status badge -->
-    <div class="watcher-status-row">
-      <span class="watcher-dot" id="watcher-dot"></span>
-      <span class="watcher-status-text" id="watcher-status-text">Checking...</span>
-    </div>
-
-    <!-- Add trigger form -->
-    <div class="trigger-form">
-      <input type="text" id="trigger-label"        placeholder="Label (e.g. Song request)" style="flex:2" />
-      <input type="text" id="trigger-pattern"      placeholder="Match text (e.g. !play)" style="flex:2" />
-      <input type="text" id="trigger-strip-prefix" placeholder="Strip prefix (e.g. !play)" style="flex:2" title="Everything after this prefix becomes the search query" />
-      <input type="text" id="trigger-regex"        placeholder="Regex (optional)" style="flex:2" />
-      <button id="btn-trigger-add">Add</button>
-    </div>
-
-    <!-- Trigger list -->
-    <div class="trigger-list" id="trigger-list">
-      <div class="trigger-empty">No triggers defined</div>
-    </div>
-
-    <!-- Recent events -->
-    <div class="events-label">Recent matched events</div>
-    <div class="events-log" id="events-log">
-      <div class="events-empty">No events yet</div>
-    </div>
-
-    <!-- Ban words -->
-    <div class="banwords-label">Ban words <span class="banwords-hint">— messages containing these words are ignored even if a trigger matches</span></div>
-    <div class="banwords-form">
-      <input type="text" id="banword-input" placeholder="Word to ban..." />
-      <button id="btn-banword-add">Add</button>
-    </div>
-    <div class="banwords-list" id="banwords-list">
-      <span class="banwords-empty">No ban words</span>
-    </div>
-  </div>
-
   <!-- ── LAST SONG CARD ────────────────────────────────── -->
   <div class="card">
-    <label>Last detected track</label>
+    <label>Currently Playing / Last Detected Track</label>
     <div class="last-title" id="last-song">&mdash;</div>
   </div>
 

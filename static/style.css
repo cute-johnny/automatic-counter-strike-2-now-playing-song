@@ -132,11 +132,12 @@ input[type="text"]:focus { border-color: #ff6b35; }
 .palette-btn:active { transform: scale(0.95); }
 .palette-btn:hover  { filter: brightness(1.25); }
 
-.palette-text     { background: #2a2a3a; color: #ccc;    border-color: #3a3a4a; }
-.palette-artist   { background: #1a2a3a; color: #6bd4f5; border-color: #2a4a6a; }
-.palette-title    { background: #1a3a2a; color: #beff00; border-color: #2a6a4a; }
-.palette-time     { background: #2a1a3a; color: #cc88ff; border-color: #4a2a6a; }
-.palette-duration { background: #2a2218; color: #ffcc66; border-color: #5a4a28; }
+.palette-text      { background: #2a2a3a; color: #ccc;    border-color: #3a3a4a; }
+.palette-artist    { background: #1a2a3a; color: #6bd4f5; border-color: #2a4a6a; }
+.palette-title     { background: #1a3a2a; color: #beff00; border-color: #2a6a4a; }
+.palette-time      { background: #2a1a3a; color: #cc88ff; border-color: #4a2a6a; }
+.palette-duration  { background: #2a2218; color: #ffcc66; border-color: #5a4a28; }
+.palette-requester { background: #2a1824; color: #ff79c6; border-color: #5a2848; }
 
 /* ── BLOCK LIST ───────────────────────────────────────── */
 .builder-label {
@@ -232,11 +233,12 @@ input[type="text"]:focus { border-color: #ff6b35; }
   text-transform: uppercase;
 }
 
-.block-badge-text     { background: #2a2a3a; color: #aaa; }
-.block-badge-artist   { background: #1a2a3a; color: #6bd4f5; }
-.block-badge-title    { background: #1a3a2a; color: #beff00; }
-.block-badge-time     { background: #2a1a3a; color: #cc88ff; }
-.block-badge-duration { background: #2a2218; color: #ffcc66; }
+.block-badge-text      { background: #2a2a3a; color: #aaa; }
+.block-badge-artist    { background: #1a2a3a; color: #6bd4f5; }
+.block-badge-title     { background: #1a3a2a; color: #beff00; }
+.block-badge-time      { background: #2a1a3a; color: #cc88ff; }
+.block-badge-duration  { background: #2a2218; color: #ffcc66; }
+.block-badge-requester { background: #2a1824; color: #ff79c6; }
 
 /* Editable text input inside TEXT blocks */
 .block-input {
@@ -780,4 +782,316 @@ button:active { transform: scale(0.97); }
   padding: 2px 6px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* ── SONG QUEUE ─────────────────────────────────── */
+.queue-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.queue-count { font-weight: 600; }
+
+.queue-processing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ff6b35;
+  font-weight: 600;
+}
+
+.processing-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff6b35;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  min-height: 40px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.queue-empty {
+  text-align: center;
+  color: #444;
+  font-size: 0.8rem;
+  padding: 20px 0;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #0f0f13;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: all 0.15s;
+}
+
+.queue-item:hover {
+  border-color: #3a3a4a;
+  background: #14141a;
+}
+
+.queue-position {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ff6b35;
+  background: #1a0a0a;
+  border: 1px solid #2a1a1a;
+  border-radius: 4px;
+  padding: 2px 6px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.queue-song-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-title {
+  font-size: 0.88rem;
+  color: #ccc;
+  font-weight: 600;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-artist {
+  font-size: 0.75rem;
+  color: #666;
+  font-style: italic;
+}
+
+.queue-source {
+  font-size: 0.68rem;
+  color: #444;
+  background: #1a1a24;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.queue-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.queue-btn {
+  background: none;
+  border: 1px solid #2a2a3a;
+  color: #555;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.queue-btn:hover {
+  background: #1a1a24;
+  border-color: #3a3a4a;
+  color: #aaa;
+}
+
+.queue-btn-danger:hover {
+  border-color: #f4433644;
+  color: #f44336;
+}
+
+.queue-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-danger {
+  background: #2a1a1a;
+  color: #f44336;
+  border-color: #5a2a2a;
+}
+
+.btn-danger:hover {
+  background: #3a2020;
+}
+
+/* ── NEW CUSTOMIZATION & QUEUE RULES UI ───────────────── */
+.inline-code {
+  background: #0f0f13;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.builder-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ui-select,
+input[type="number"] {
+  width: 100%;
+  background: #0f0f13;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.84rem;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ui-select:focus,
+input[type="number"]:focus {
+  border-color: #ff6b35;
+}
+
+.queue-mode-box {
+  margin-bottom: 14px;
+}
+
+.queue-manual-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.queue-manual-row input[type="text"] {
+  flex: 1;
+}
+
+.btn-accent {
+  background: #ff6b35;
+  color: #fff;
+  flex: unset;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+}
+
+.btn-accent:hover {
+  opacity: 0.88;
+}
+
+.queue-status-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.playback-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.playback-pill.playing {
+  background: #142a18;
+  color: #4caf50;
+  border: 1px solid #285a30;
+}
+
+.playback-pill.idle {
+  background: #1f1f2a;
+  color: #777;
+  border: 1px solid #2a2a3a;
+}
+
+.queue-btn-play {
+  border-color: #285a30;
+  color: #4caf50;
+}
+
+.queue-btn-play:hover {
+  background: #142a18;
+  border-color: #4caf50;
+  color: #66bb6a;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid #2a2a3a;
+  margin: 20px 0 16px;
+}
+
+.rules-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.rules-status {
+  font-size: 0.74rem;
+  color: #4caf50;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .builder-options-grid,
+  .rules-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rule-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.rule-hint {
+  font-size: 0.68rem;
+  color: #555;
+  margin-top: 4px;
+}
+
+.event-status {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.event-status.ok {
+  background: #142a18;
+  color: #4caf50;
+}
+
+.event-status.queued {
+  background: #1a2436;
+  color: #6bd4f5;
+}
+
+.event-status.rejected {
+  background: #2a1414;
+  color: #f44336;
 }

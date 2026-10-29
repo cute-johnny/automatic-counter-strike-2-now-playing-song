@@ -1,0 +1,153 @@
+{
+  "Hearts": {
+    "blocks": [
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "❤❤❤ Now Playing:",
+        "color": "gold"
+      },
+      {
+        "id": "b3",
+        "type": "title",
+        "value": "",
+        "color": "lightgreen"
+      },
+      {
+        "id": "b2",
+        "type": "artist",
+        "value": "",
+        "color": "silver"
+      },
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "❤❤❤",
+        "color": "gold"
+      }
+    ],
+    "use_colors": false
+  },
+  "Radio": {
+    "blocks": [
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "◁ || ▷ ⩇⩇:⩇⩇",
+        "color": "gold"
+      },
+      {
+        "id": "b3",
+        "type": "title",
+        "value": "",
+        "color": "lightgreen"
+      },
+      {
+        "id": "b2",
+        "type": "text",
+        "value": "",
+        "color": "gold"
+      },
+      {
+        "id": "b2",
+        "type": "artist",
+        "value": "",
+        "color": "silver"
+      },
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "",
+        "color": "gold"
+      }
+    ],
+    "use_colors": false
+  },
+  "Main": {
+    "blocks": [
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "◁ || ▷",
+        "color": "gold",
+        "font": "normal"
+      },
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "3:14",
+        "color": "gold",
+        "font": "mono"
+      },
+      {
+        "id": "b3",
+        "type": "title",
+        "value": "",
+        "color": "lightgreen",
+        "font": "bold"
+      },
+      {
+        "id": "b2",
+        "type": "text",
+        "value": "by",
+        "color": "gold",
+        "font": "bold_italic"
+      },
+      {
+        "id": "b2",
+        "type": "artist",
+        "value": "",
+        "color": "silver",
+        "font": "bold_italic"
+      }
+    ],
+    "use_colors": false
+  },
+  "MAIN": {
+    "blocks": [
+      {
+        "id": "b1",
+        "type": "text",
+        "value": "◁ || ▷",
+        "color": "gold",
+        "font": "italic"
+      },
+      {
+        "id": "b1",
+        "type": "time",
+        "value": "",
+        "color": "silver",
+        "font": "mono"
+      },
+      {
+        "id": "b3",
+        "type": "title",
+        "value": "",
+        "color": "lightgreen",
+        "font": "bold"
+      },
+      {
+        "id": "b3",
+        "type": "text",
+        "value": "by",
+        "color": "gold",
+        "font": "bold_italic"
+      },
+      {
+        "id": "b2",
+        "type": "artist",
+        "value": "",
+        "color": "silver",
+        "font": "bold_italic"
+      },
+      {
+        "id": "b2",
+        "type": "duration",
+        "value": "",
+        "color": "olive",
+        "font": "mono"
+      }
+    ],
+    "use_colors": false
+  }
+}

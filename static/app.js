@@ -100,10 +100,11 @@ const COLORS = {
 };
 
 const EXAMPLE = {
-  title:    "Ben 10 (2005) Intro PL",
-  artist:   "Cartoon Network",
-  time:     "1:55",
-  duration: "3:18",
+  title:     "Ben 10 (2005) Intro PL",
+  artist:    "Cartoon Network",
+  time:      "1:55",
+  duration:  "3:18",
+  requester: "Teammate",
 };
 
 const CHAR_CATS = {
@@ -118,11 +119,22 @@ const CHAR_CATS = {
 
 /* ── STATE ────────────────────────────────────────────── */
 
-let blocks      = [];
-let useColors   = false;
-let activeInput = null;   // last focused TEXT input (for char picker)
-let activePreset = null;  // currently loaded preset name
-let dragSrcIdx  = null;   // block index being dragged
+let blocks         = [];
+let useColors      = false;
+let chatCommand    = "say";
+let blockSeparator = " ";
+let activeInput    = null;   // last focused TEXT input (for char picker)
+let activeInputIndex = null;
+let activePreset   = null;  // currently loaded preset name
+let dragSrcIdx     = null;   // block index being dragged
+let dragOverItem   = null;
+
+function clearDragOverItem() {
+  if (dragOverItem) {
+    dragOverItem.classList.remove("drag-over");
+    dragOverItem = null;
+  }
+}
 
 let _idCounter = 0;
 function newId() { return "b" + (++_idCounter); }
@@ -131,11 +143,12 @@ function newId() { return "b" + (++_idCounter); }
 
 function addBlock(type) {
   const defaults = {
-    text:     { value: "", color: "gold",       font: "normal" },
-    artist:   { value: "", color: "silver",     font: "normal" },
-    title:    { value: "", color: "lightgreen", font: "normal" },
-    time:     { value: "", color: "silver",     font: "normal" },
-    duration: { value: "", color: "olive",      font: "normal" },
+    text:      { value: "", color: "gold",       font: "normal" },
+    artist:    { value: "", color: "silver",     font: "normal" },
+    title:     { value: "", color: "lightgreen", font: "normal" },
+    time:      { value: "", color: "silver",     font: "normal" },
+    duration:  { value: "", color: "olive",      font: "normal" },
+    requester: { value: "", color: "pink",       font: "normal" },
   };
   const d = defaults[type] || defaults.text;
   blocks.push({ id: newId(), type, value: d.value, color: d.color, font: d.font });
@@ -174,7 +187,7 @@ function makeEmptyMsg() {
 function makeBlockEl(block, idx) {
   const item = document.createElement("div");
   item.className = "block-item";
-  item.draggable = false; // only enabled when grabbing the handle
+  item.draggable = false;
 
   /* ── Drag events ── */
   item.addEventListener("dragstart", (e) => {
@@ -188,22 +201,27 @@ function makeBlockEl(block, idx) {
   item.addEventListener("dragend", () => {
     item.draggable = false;
     item.classList.remove("dragging");
-    document.querySelectorAll(".block-item").forEach(el => el.classList.remove("drag-over"));
+    clearDragOverItem();
     document.getElementById("block-list").classList.remove("drag-over-zone");
   });
 
   item.addEventListener("dragover", (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    document.querySelectorAll(".block-item").forEach(el => el.classList.remove("drag-over"));
-    item.classList.add("drag-over");
+    if (dragOverItem !== item) {
+      clearDragOverItem();
+      dragOverItem = item;
+      item.classList.add("drag-over");
+    }
   });
 
-  item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+  item.addEventListener("dragleave", () => {
+    if (dragOverItem === item) clearDragOverItem();
+  });
 
   item.addEventListener("drop", (e) => {
     e.preventDefault();
-    item.classList.remove("drag-over");
+    clearDragOverItem();
     if (dragSrcIdx === null || dragSrcIdx === idx) return;
     const moved = blocks.splice(dragSrcIdx, 1)[0];
     blocks.splice(idx, 0, moved);
@@ -227,7 +245,7 @@ function makeBlockEl(block, idx) {
   badge.className = `block-badge block-badge-${block.type}`;
   badge.textContent = {
     text: "TEXT", artist: "ARTIST", title: "TITLE",
-    time: "TIME", duration: "LENGTH",
+    time: "TIME", duration: "LENGTH", requester: "REQUESTER",
   }[block.type] ?? block.type.toUpperCase();
 
   /* ── Content (input for TEXT, label for others) ── */
@@ -247,6 +265,7 @@ function makeBlockEl(block, idx) {
 
     contentEl.addEventListener("focus", () => {
       activeInput = contentEl;
+      activeInputIndex = idx;
       const lbl = document.getElementById("active-field-label");
       lbl.textContent = `TEXT block #${idx + 1}`;
       lbl.style.color = "#ff6b35";
@@ -255,10 +274,11 @@ function makeBlockEl(block, idx) {
     contentEl = document.createElement("span");
     contentEl.className = "block-label";
     contentEl.textContent = {
-      artist:   "← artist name from SoundCloud",
-      title:    "← song title from SoundCloud",
-      time:     "← current playback time (e.g. 1:55)",
-      duration: "← song length (e.g. 3:18)",
+      artist:    "← artist / channel name",
+      title:     "← song / video title",
+      time:      "← current playback time (e.g. 1:55)",
+      duration:  "← song length (e.g. 3:18)",
+      requester: "← player who requested the song",
     }[block.type] ?? "";
   }
 
@@ -320,6 +340,15 @@ function makeBlockEl(block, idx) {
 
 /* ── PREVIEW ──────────────────────────────────────────── */
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function updatePreview() {
   const previewEl = document.getElementById("preview");
   const parts = [];
@@ -329,27 +358,29 @@ function updatePreview() {
     const font = block.font || "normal";
     let text = "";
 
-    if (block.type === "text")     text = block.value.trim();
-    if (block.type === "artist")   text = EXAMPLE.artist;
-    if (block.type === "title")    text = EXAMPLE.title;
-    if (block.type === "time")     text = EXAMPLE.time;
-    if (block.type === "duration") text = EXAMPLE.duration;
+    if (block.type === "text")      text = block.value.trim();
+    if (block.type === "artist")    text = EXAMPLE.artist;
+    if (block.type === "title")     text = EXAMPLE.title;
+    if (block.type === "time")      text = EXAMPLE.time;
+    if (block.type === "duration")  text = EXAMPLE.duration;
+    if (block.type === "requester") text = EXAMPLE.requester;
 
     if (!text) continue;
 
-    const styled = applyFont(text, font);
+    const styled = escapeHtml(applyFont(text, font));
     parts.push(colorHex
       ? `<span style="color:${colorHex}">${styled}</span>`
       : styled);
   }
 
-  const cmd = useColors ? "playerchatwheel CW.Agree" : "say";
+  const sep = escapeHtml(blockSeparator || " ");
+  const cmd = useColors ? "playerchatwheel CW.Agree" : (chatCommand === "say_team" ? "say_team" : "say");
   previewEl.innerHTML = parts.length
-    ? `${cmd} "${parts.join(" ")}"`
+    ? `${cmd} "${parts.join(sep)}"`
     : `<span style="color:#444">— no blocks —</span>`;
 }
 
-/* ── COLOR TOGGLE ─────────────────────────────────────── */
+/* ── BUILDER OPTIONS & COLOR TOGGLE ───────────────────── */
 
 function onToggleColors() {
   useColors = document.getElementById("use-colors").checked;
@@ -358,6 +389,14 @@ function onToggleColors() {
     sel.style.display = useColors ? "" : "none";
   });
   updatePreview();
+  scheduleApply();
+}
+
+function onBuilderOptionChange() {
+  chatCommand    = document.getElementById("chat-command").value;
+  blockSeparator = document.getElementById("block-separator").value;
+  updatePreview();
+  scheduleApply();
 }
 
 /* ── AUTO-SAVE (debounced) ────────────────────────────── */
@@ -377,11 +416,16 @@ async function applyConfig(auto = false) {
     const res  = await fetch("/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blocks, use_colors: useColors }),
+      body: JSON.stringify({
+        blocks,
+        use_colors:      useColors,
+        chat_command:    chatCommand,
+        block_separator: blockSeparator,
+      }),
     });
     const data = await res.json();
     if (data.used_placeholder) {
-      setStatus("Saved — waiting for a track from SoundCloud", "ok");
+      setStatus("Saved — waiting for a track from YouTube/SoundCloud", "ok");
     } else {
       setStatus(auto ? "Auto-saved ✓" : "Saved!", "ok");
     }
@@ -407,26 +451,28 @@ async function loadConfig() {
     const res = await fetch("/config");
     const d   = await res.json();
 
-    blocks    = d.blocks     ?? [];
-    useColors = d.use_colors ?? false;
+    const savedPreset = localStorage.getItem('cs2np_active_preset');
+    if (savedPreset && activePreset === null) {
+      activePreset = savedPreset;
+    }
 
-    document.getElementById("use-colors").checked = useColors;
+    blocks         = d.blocks          ?? [];
+    useColors      = d.use_colors      ?? false;
+    chatCommand    = d.chat_command    || "say";
+    blockSeparator = d.block_separator || " ";
+
+    document.getElementById("use-colors").checked      = useColors;
+    document.getElementById("chat-command").value      = chatCommand;
+    document.getElementById("block-separator").value   = blockSeparator;
     document.getElementById("warning-box").style.display = useColors ? "" : "none";
+
+    if (d.queue_settings) {
+      populateQueueSettingsForm(d.queue_settings);
+    }
 
     renderBlocks();
     updatePreview();
-
-    // Restore active preset from localStorage (survives page refresh)
-    const savedPreset = localStorage.getItem('cs2np_active_preset');
-    if (savedPreset && activePreset === null) activePreset = savedPreset;
-
-    const last = d.last_artist
-      ? `${d.last_artist} - ${d.last_song}`
-      : (d.last_song || "—");
-    const timeStr = (d.last_time && d.last_duration)
-      ? `  [${d.last_time} / ${d.last_duration}]`
-      : d.last_time ? `  [${d.last_time}]` : "";
-    document.getElementById("last-song").textContent = last + timeStr;
+    applyLastTrackUI(d);
   } catch (e) {
     console.warn("Could not load config:", e);
   }
@@ -499,11 +545,15 @@ async function presetSave() {
   const name      = nameInput.value.trim();
   if (!name) { nameInput.focus(); return; }
 
-  // Push current blocks to server first (without triggering markCustom)
   await fetch("/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ blocks, use_colors: useColors }),
+    body: JSON.stringify({
+      blocks,
+      use_colors:      useColors,
+      chat_command:    chatCommand,
+      block_separator: blockSeparator,
+    }),
   });
 
   const res = await fetch("/presets", {
@@ -513,7 +563,7 @@ async function presetSave() {
   });
 
   if (res.ok) {
-    activePreset = name;   // mark as active BEFORE re-rendering
+    activePreset = name;
     localStorage.setItem('cs2np_active_preset', name);
     nameInput.value = "";
     await renderPresets(activePreset);
@@ -531,10 +581,14 @@ async function presetLoad(name) {
   const d = await res.json();
   if (!d.config) return;
 
-  blocks    = d.config.blocks     ?? [];
-  useColors = d.config.use_colors ?? false;
+  blocks         = d.config.blocks          ?? [];
+  useColors      = d.config.use_colors      ?? false;
+  chatCommand    = d.config.chat_command    || "say";
+  blockSeparator = d.config.block_separator || " ";
 
-  document.getElementById("use-colors").checked = useColors;
+  document.getElementById("use-colors").checked        = useColors;
+  document.getElementById("chat-command").value        = chatCommand;
+  document.getElementById("block-separator").value     = blockSeparator;
   document.getElementById("warning-box").style.display = useColors ? "" : "none";
 
   activePreset = name;
@@ -556,7 +610,7 @@ async function presetDelete(name) {
   await renderPresets(activePreset);
 }
 
-/* ── EXPORT ───────────────────────────────────────────── */
+/* ── EXPORT & IMPORT ──────────────────────────────────── */
 
 async function exportPresets() {
   try {
@@ -571,8 +625,6 @@ async function exportPresets() {
     alert("Failed to export presets. Please try again.");
   }
 }
-
-/* ── IMPORT ───────────────────────────────────────────── */
 
 async function importPresets(file) {
   if (!file) return;
@@ -617,12 +669,8 @@ function buildCharGrid(gridId, chars) {
       activeInput.selectionStart = activeInput.selectionEnd = start + ch.length;
       activeInput.focus();
 
-      // Sync value back to blocks state
-      const blockItems = document.querySelectorAll(".block-item");
-      blockItems.forEach((item, bi) => {
-        const inp = item.querySelector(".block-input");
-        if (inp && inp === activeInput) blocks[bi].value = inp.value;
-      });
+      if (!activeInput.isConnected || activeInputIndex === null || !blocks[activeInputIndex]) return;
+      blocks[activeInputIndex].value = activeInput.value;
 
       updatePreview();
       scheduleApply();
@@ -631,22 +679,55 @@ function buildCharGrid(gridId, chars) {
   });
 }
 
-/* ── POLL LAST TRACK ──────────────────────────────────── */
+/* ── POLL PANEL STATE (consolidated) ──────────────────── */
 
-setInterval(async () => {
+let _lastTrackText = null;
+let _panelPollInFlight = false;
+let _lastEventsSignature = null;
+
+function applyLastTrackUI(d) {
+  const last = d.last_artist
+    ? `${d.last_artist} - ${d.last_song}`
+    : (d.last_song || "—");
+  const timeStr = (d.last_time && d.last_duration)
+    ? `  [${d.last_time} / ${d.last_duration}]`
+    : d.last_time ? `  [${d.last_time}]` : "";
+  const reqStr = d.last_requester ? `  (req: ${d.last_requester})` : "";
+  const text = last + timeStr + reqStr;
+  if (text !== _lastTrackText) {
+    _lastTrackText = text;
+    document.getElementById("last-song").textContent = text;
+  }
+}
+
+async function pollPanelState() {
+  if (_panelPollInFlight || document.hidden) return;
+  _panelPollInFlight = true;
   try {
-    const res = await fetch("/config");
-    const d   = await res.json();
+    const res = await fetch("/panel/state");
+    if (!res.ok) return;
+    const d = await res.json();
+    applyLastTrackUI(d);
+    if (d.watcher) applyWatcherStatusUI(d.watcher);
+    if (Array.isArray(d.events)) {
+      const sig = JSON.stringify(d.events.map(e => [e.id, e.status]));
+      if (sig !== _lastEventsSignature) {
+        _lastEventsSignature = sig;
+        renderEvents(d.events);
+      }
+    }
+    if (d.queue) updateQueueUI(d.queue);
+  } catch {
+    const dot = document.getElementById("watcher-dot");
+    if (dot) dot.className = "watcher-dot error";
+  } finally {
+    _panelPollInFlight = false;
+  }
+}
 
-    const last = d.last_artist
-      ? `${d.last_artist} - ${d.last_song}`
-      : (d.last_song || "—");
-    const timeStr = (d.last_time && d.last_duration)
-      ? `  [${d.last_time} / ${d.last_duration}]`
-      : d.last_time ? `  [${d.last_time}]` : "";
-    document.getElementById("last-song").textContent = last + timeStr;
-  } catch {}
-}, 3000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) pollPanelState();
+});
 
 /* ── DRAG OVER EMPTY ZONE ─────────────────────────────── */
 
@@ -683,6 +764,8 @@ document.addEventListener("DOMContentLoaded", () => {
 /* ── INIT ─────────────────────────────────────────────── */
 
 document.getElementById("use-colors").addEventListener("change", onToggleColors);
+document.getElementById("chat-command").addEventListener("change", onBuilderOptionChange);
+document.getElementById("block-separator").addEventListener("change", onBuilderOptionChange);
 document.getElementById("btn-apply").addEventListener("click", () => applyConfig(false));
 document.getElementById("btn-preset-save").addEventListener("click", presetSave);
 document.getElementById("btn-export").addEventListener("click", exportPresets);
@@ -702,37 +785,24 @@ for (const [gridId, chars] of Object.entries(CHAR_CATS)) {
   buildCharGrid(gridId, chars);
 }
 
-loadConfig();
-renderPresets(activePreset);
-
 /* ═══════════════════════════════════════════════════════
    CHAT TRIGGERS
    ═══════════════════════════════════════════════════════ */
 
-let _lastEventId = null;  // track newest event to avoid re-showing
+function applyWatcherStatusUI(d) {
+  const dot  = document.getElementById("watcher-dot");
+  const text = document.getElementById("watcher-status-text");
+  if (!dot || !text) return;
 
-/* ── Watcher status ───────────────────────────────────── */
-
-async function updateWatcherStatus() {
-  try {
-    const res = await fetch("/watcher/status");
-    const d   = await res.json();
-    const dot  = document.getElementById("watcher-dot");
-    const text = document.getElementById("watcher-status-text");
-
-    if (!d.running) {
-      dot.className  = "watcher-dot error";
-      text.textContent = d.reason || "Watcher not running";
-    } else if (!d.log_exists) {
-      dot.className  = "watcher-dot warn";
-      text.textContent = `Log not found — start CS2 with -condebug -noclearlog`;
-    } else {
-      dot.className  = "watcher-dot ok";
-      text.textContent = `Watching: ${d.log_path.split(/[\\/]/).slice(-3).join("/")}`;
-    }
-  } catch {
-    const dot = document.getElementById("watcher-dot");
-    if (dot) { dot.className = "watcher-dot error"; }
+  if (!d.running) {
+    dot.className    = "watcher-dot error";
+    text.textContent = d.reason || "Watcher not running";
+  } else if (!d.log_exists) {
+    dot.className    = "watcher-dot warn";
+    text.textContent = `Log not found — start CS2 with -condebug -noclearlog`;
+  } else {
+    dot.className    = "watcher-dot ok";
+    text.textContent = `Watching: ${d.log_path.split(/[\\/]/).slice(-3).join("/")}`;
   }
 }
 
@@ -774,7 +844,6 @@ function renderTriggers(triggers) {
     pattern.textContent = t.regex ? `/${t.regex}/` : `"${t.pattern}"`;
     pattern.title = t.regex ? `regex: ${t.regex}` : `match: ${t.pattern}`;
 
-    // Strip prefix badge
     let prefixBadge = null;
     if (t.strip_prefix) {
       prefixBadge = document.createElement("span");
@@ -848,21 +917,6 @@ async function deleteTrigger(id) {
 
 /* ── Events log ───────────────────────────────────────── */
 
-async function pollEvents() {
-  try {
-    const res    = await fetch("/watcher/events?limit=30");
-    const events = await res.json();
-    if (!events.length) return;
-
-    // Only render if there's a new event
-    const newestId = events[0]?.id;
-    if (newestId === _lastEventId) return;
-    _lastEventId = newestId;
-
-    renderEvents(events);
-  } catch {}
-}
-
 function renderEvents(events) {
   const log = document.getElementById("events-log");
   log.innerHTML = "";
@@ -881,11 +935,13 @@ function renderEvents(events) {
 
     const t = document.createElement("span");
     t.className = "event-time";
-    t.textContent = e.timestamp ? e.timestamp.split(" - ")[1] : "??:??:??";
+    t.textContent = e.timestamp
+      ? (e.timestamp.includes(" - ") ? e.timestamp.split(" - ")[1] : e.timestamp.split(/\s+/).pop())
+      : "??:??:??";
 
     const trig = document.createElement("span");
     trig.className = "event-trigger";
-    trig.textContent = `[${e.trigger_label}]`;
+    trig.textContent = e.channel ? `[${e.channel}]` : `[${e.trigger_label}]`;
 
     const player = document.createElement("span");
     player.className = "event-player";
@@ -896,11 +952,21 @@ function renderEvents(events) {
     msg.textContent = e.message;
 
     row.append(t, trig, player, msg);
+
+    if (e.status) {
+      const statusBadge = document.createElement("span");
+      const stLower = e.status.toLowerCase();
+      const cls = stLower.startsWith("rejected") || stLower.startsWith("ignored")
+        ? "rejected"
+        : stLower.startsWith("queued") ? "queued" : "ok";
+      statusBadge.className = `event-status ${cls}`;
+      statusBadge.textContent = e.status;
+      row.appendChild(statusBadge);
+    }
+
     log.appendChild(row);
   });
 }
-
-/* ── Init triggers ────────────────────────────────────── */
 
 document.getElementById("btn-trigger-add").addEventListener("click", addTrigger);
 
@@ -909,12 +975,6 @@ document.getElementById("btn-trigger-add").addEventListener("click", addTrigger)
     if (e.key === "Enter") addTrigger();
   });
 });
-
-// Poll watcher status every 5s, events every 1s
-updateWatcherStatus();
-loadTriggers();
-setInterval(updateWatcherStatus, 5000);
-setInterval(pollEvents, 1000);
 
 /* ═══════════════════════════════════════════════════════
    BAN WORDS
@@ -984,4 +1044,328 @@ document.getElementById("banword-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") addBanWord();
 });
 
-loadBanWords();
+/* ═══════════════════════════════════════════
+   REWORKED SONG QUEUE & RULES MANAGEMENT
+   ═══════════════════════════════════════════ */
+
+let _queueRenderSignature = null;
+let _rulesSaveTimer       = null;
+let _updatingRulesForm    = false;
+
+function populateQueueSettingsForm(s) {
+  if (!s) return;
+  _updatingRulesForm = true;
+  document.getElementById("q-playback-mode").value       = s.playback_mode || "auto_queue";
+  document.getElementById("q-max-duration").value        = s.max_duration_min ?? 10;
+  document.getElementById("q-cooldown").value            = s.cooldown_sec ?? 5;
+  document.getElementById("q-player-cooldown").value     = s.per_player_cooldown_sec ?? 15;
+  document.getElementById("q-max-size").value            = s.max_queue_size ?? 20;
+  document.getElementById("q-max-per-player").value      = s.max_per_player ?? 3;
+  document.getElementById("q-chat-channels").value       = s.chat_channels || "both";
+  document.getElementById("q-prevent-duplicates").checked = Boolean(s.prevent_duplicates);
+  _updatingRulesForm = false;
+}
+
+function readQueueSettingsForm() {
+  return {
+    playback_mode:           document.getElementById("q-playback-mode").value,
+    max_duration_min:        parseInt(document.getElementById("q-max-duration").value, 10) || 0,
+    cooldown_sec:            parseInt(document.getElementById("q-cooldown").value, 10) || 0,
+    per_player_cooldown_sec: parseInt(document.getElementById("q-player-cooldown").value, 10) || 0,
+    max_queue_size:          parseInt(document.getElementById("q-max-size").value, 10) || 20,
+    max_per_player:          parseInt(document.getElementById("q-max-per-player").value, 10) || 0,
+    chat_channels:           document.getElementById("q-chat-channels").value,
+    prevent_duplicates:      document.getElementById("q-prevent-duplicates").checked,
+  };
+}
+
+function scheduleSaveQueueSettings() {
+  if (_updatingRulesForm) return;
+  clearTimeout(_rulesSaveTimer);
+  const statusEl = document.getElementById("rules-status");
+  if (statusEl) statusEl.textContent = "Saving...";
+  _rulesSaveTimer = setTimeout(saveQueueSettings, 400);
+}
+
+async function saveQueueSettings() {
+  const payload = readQueueSettingsForm();
+  const statusEl = document.getElementById("rules-status");
+  try {
+    const res = await fetch("/queue/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.settings) populateQueueSettingsForm(d.settings);
+      if (statusEl) {
+        statusEl.textContent = "Rules saved ✓";
+        setTimeout(() => { statusEl.textContent = ""; }, 2000);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to save queue settings:", e);
+    if (statusEl) statusEl.textContent = "Save error";
+  }
+}
+
+["q-playback-mode", "q-max-duration", "q-cooldown", "q-player-cooldown",
+ "q-max-size", "q-max-per-player", "q-chat-channels", "q-prevent-duplicates"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("change", scheduleSaveQueueSettings);
+    if (el.tagName === "INPUT" && el.type === "number") {
+      el.addEventListener("input", scheduleSaveQueueSettings);
+    }
+  }
+});
+
+/* ── Manual Queue / Play Now ─────────────────────── */
+
+async function submitManualQueue(playNow = false) {
+  const input = document.getElementById("queue-manual-input");
+  const query = input.value.trim();
+  if (!query) {
+    input.focus();
+    return;
+  }
+  try {
+    const res = await fetch("/queue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, source: "panel", requester: "You", play_now: playNow }),
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      input.value = "";
+      updateQueueUI(data);
+      setStatus(playNow ? `Playing "${query}" now!` : `Added "${query}" to queue`, "ok");
+      setTimeout(() => setStatus("", ""), 2500);
+    } else {
+      setStatus(data.error || "Could not add song", "error");
+      setTimeout(() => setStatus("", ""), 3000);
+    }
+  } catch (e) {
+    console.error("Failed to submit manual song:", e);
+    setStatus("Error communicating with server", "error");
+  }
+}
+
+document.getElementById("btn-queue-add").addEventListener("click", () => submitManualQueue(false));
+document.getElementById("btn-queue-playnow").addEventListener("click", () => submitManualQueue(true));
+document.getElementById("queue-manual-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitManualQueue(false);
+});
+
+/* ── Queue Actions ───────────────────────────────── */
+
+async function playNextSong() {
+  try {
+    const res = await fetch("/queue/next", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      updateQueueUI(data);
+      setStatus("Playing next song in queue...", "ok");
+    } else {
+      setStatus(data.error || "Queue is empty", "warn");
+    }
+  } catch (e) {
+    console.error("Failed to play next song:", e);
+    setStatus("Error playing next song", "error");
+  }
+}
+
+async function playSpecificQueuedSong(songId) {
+  try {
+    const res = await fetch(`/queue/${encodeURIComponent(songId)}/play`, { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      updateQueueUI(data);
+      setStatus("Playing selected song...", "ok");
+    } else {
+      setStatus(data.error || "Failed to play song", "error");
+    }
+  } catch (e) {
+    console.error("Failed to play song:", e);
+  }
+}
+
+async function clearQueue() {
+  if (!confirm("Clear all songs from the queue?")) return;
+
+  try {
+    const res = await fetch("/queue/clear", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      updateQueueUI(data);
+      setStatus("Queue cleared", "ok");
+    }
+  } catch (e) {
+    console.error("Failed to clear queue:", e);
+    setStatus("Error clearing queue", "error");
+  }
+}
+
+async function removeSongFromQueue(songId) {
+  try {
+    const res = await fetch(`/queue/${encodeURIComponent(songId)}`, { method: "DELETE" });
+    const data = await res.json();
+    if (data.ok) {
+      updateQueueUI(data);
+    } else {
+      setStatus(data.error || "Failed to remove song", "error");
+    }
+  } catch (e) {
+    console.error("Failed to remove song:", e);
+    setStatus("Error removing song", "error");
+  }
+}
+
+async function moveSongInQueue(songId, newPosition) {
+  try {
+    const res = await fetch(`/queue/${encodeURIComponent(songId)}/move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position: newPosition }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      updateQueueUI(data);
+    } else {
+      setStatus(data.error || "Failed to move song", "error");
+    }
+  } catch (e) {
+    console.error("Failed to move song:", e);
+    setStatus("Error moving song", "error");
+  }
+}
+
+/* ── Queue UI Rendering ──────────────────────────── */
+
+function updateQueueUI(data) {
+  const signature = JSON.stringify([
+    data.queue || [],
+    data.size,
+    Boolean(data.processing),
+    Boolean(data.is_playing),
+  ]);
+  if (signature === _queueRenderSignature) return;
+  _queueRenderSignature = signature;
+
+  const queueList       = document.getElementById("queue-list");
+  const queueCount      = document.getElementById("queue-count");
+  const queueProcessing = document.getElementById("queue-processing");
+  const statePill       = document.getElementById("playback-state-pill");
+
+  queueCount.textContent = `${data.size} song${data.size !== 1 ? 's' : ''} in queue`;
+  queueProcessing.style.display = data.processing ? "flex" : "none";
+
+  if (statePill) {
+    statePill.textContent = data.is_playing ? "Playing" : "Idle";
+    statePill.className   = "playback-pill " + (data.is_playing ? "playing" : "idle");
+  }
+
+  queueList.innerHTML = "";
+
+  if (!data.queue || data.queue.length === 0) {
+    queueList.innerHTML = '<div class="queue-empty">No songs in queue</div>';
+    return;
+  }
+
+  const total = data.queue.length;
+  data.queue.forEach((song, index) => {
+    const item = createQueueItem(song, index + 1, total);
+    queueList.appendChild(item);
+  });
+}
+
+function createQueueItem(song, position, total) {
+  const item = document.createElement("div");
+  item.className = "queue-item";
+  item.dataset.songId = song.id;
+
+  const posBadge = document.createElement("div");
+  posBadge.className = "queue-position";
+  posBadge.textContent = position;
+
+  const info = document.createElement("div");
+  info.className = "queue-song-info";
+
+  const title = document.createElement("div");
+  title.className = "queue-title";
+  title.textContent = song.title;
+  title.title = song.title;
+
+  if (song.artist) {
+    const artist = document.createElement("div");
+    artist.className = "queue-artist";
+    artist.textContent = song.artist;
+    artist.title = song.artist;
+    info.appendChild(artist);
+  }
+
+  info.appendChild(title);
+
+  if (song.requester || song.source) {
+    const source = document.createElement("span");
+    source.className = "queue-source";
+    source.textContent = song.requester ? `by ${song.requester}` : song.source;
+    info.appendChild(source);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "queue-actions";
+
+  // Play immediately button
+  const playBtn = document.createElement("button");
+  playBtn.className = "queue-btn queue-btn-play";
+  playBtn.textContent = "▶";
+  playBtn.title = "Play this song now";
+  playBtn.addEventListener("click", () => playSpecificQueuedSong(song.id));
+  actions.appendChild(playBtn);
+
+  if (position > 1) {
+    const upBtn = document.createElement("button");
+    upBtn.className = "queue-btn";
+    upBtn.textContent = "▲";
+    upBtn.title = "Move up";
+    upBtn.addEventListener("click", () => moveSongInQueue(song.id, position - 1));
+    actions.appendChild(upBtn);
+  }
+
+  if (position < total) {
+    const downBtn = document.createElement("button");
+    downBtn.className = "queue-btn";
+    downBtn.textContent = "▼";
+    downBtn.title = "Move down";
+    downBtn.addEventListener("click", () => moveSongInQueue(song.id, position + 1));
+    actions.appendChild(downBtn);
+  }
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "queue-btn queue-btn-danger";
+  delBtn.textContent = "×";
+  delBtn.title = "Remove from queue";
+  delBtn.addEventListener("click", () => removeSongFromQueue(song.id));
+  actions.appendChild(delBtn);
+
+  item.append(posBadge, info, actions);
+  return item;
+}
+
+document.getElementById("btn-queue-next").addEventListener("click", playNextSong);
+document.getElementById("btn-queue-clear").addEventListener("click", clearQueue);
+
+/* ── Startup Sequence ────────────────────────────── */
+
+async function init() {
+  await loadConfig();
+  await renderPresets(activePreset);
+  await loadTriggers();
+  await loadBanWords();
+  await pollPanelState();
+  setInterval(pollPanelState, 1500);
+}
+
+init();

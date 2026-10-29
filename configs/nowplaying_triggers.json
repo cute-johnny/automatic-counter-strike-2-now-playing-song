@@ -1,0 +1,10 @@
+[
+  {
+    "id": "ae52979d",
+    "label": "!play",
+    "pattern": "!play",
+    "regex": "",
+    "enabled": true,
+    "strip_prefix": "!play"
+  }
+]

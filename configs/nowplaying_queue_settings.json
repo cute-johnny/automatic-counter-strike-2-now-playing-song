@@ -1,0 +1,10 @@
+{
+  "playback_mode": "instant",
+  "cooldown_sec": 5,
+  "per_player_cooldown_sec": 15,
+  "max_queue_size": 20,
+  "max_per_player": 3,
+  "prevent_duplicates": true,
+  "max_duration_min": 10,
+  "chat_channels": "both"
+}
